@@ -31,10 +31,10 @@
 #include "target/armv7m.h"
 #include "rtos_riot_stackings.h"
 
-static int riot_detect_rtos(struct target *target);
+static bool riot_detect_rtos(struct target *target);
 static int riot_create(struct target *target);
 static int riot_update_threads(struct rtos *rtos);
-static int riot_get_thread_reg_list(struct rtos *rtos, int64_t thread_id, char **hex_reg_list);
+static int riot_get_thread_reg_list(struct rtos *rtos, int64_t thread_id,struct rtos_reg **reg_list, int *num_regs);
 static int riot_get_symbol_list_to_lookup(symbol_table_elem_t *symbol_list[]);
 
 
@@ -44,16 +44,34 @@ struct riot_thread_state {
 };
 
 /* refer core/tcb.h */
+// static const struct riot_thread_state riot_thread_states[] = {
+// 	{ 0, "Stopped" },
+// 	{ 1, "Sleeping" },
+// 	{ 2, "Blocked mutex" },
+// 	{ 3, "Blocked receive" },
+// 	{ 4, "Blocked send" },
+// 	{ 5, "Blocked reply" },
+// 	{ 6, "Running" },
+// 	{ 7, "Pending" },
+// };
+
 static const struct riot_thread_state riot_thread_states[] = {
-	{ 0, "Stopped" },
-	{ 1, "Sleeping" },
-	{ 2, "Blocked mutex" },
-	{ 3, "Blocked receive" },
-	{ 4, "Blocked send" },
-	{ 5, "Blocked reply" },
-	{ 6, "Running" },
-	{ 7, "Pending" },
+    { 0,"STOPPED"},                /**< has terminated                           */
+    { 1,"ZOMBIE"},                 /**< has terminated & keeps thread's thread_t */
+    { 2,"SLEEPING"},               /**< sleeping                                 */
+    { 3,"MUTEX_BLOCKED"},          /**< waiting for a locked mutex               */
+    { 4,"RECEIVE_BLOCKED"},        /**< waiting for a message                    */
+    { 5,"SEND_BLOCKED"},           /**< waiting for message to be delivered      */
+    { 6,"REPLY_BLOCKED"},          /**< waiting for a message response           */
+    { 7,"FLAG_BLOCKED_ANY"},       /**< waiting for any flag from flag_mask      */
+    { 8,"FLAG_BLOCKED_ALL"},       /**< waiting for all flags in flag_mask       */
+    { 9,"MBOX_BLOCKED"},           /**< waiting for get/put on mbox              */
+    { 10,"COND_BLOCKED"},           /**< waiting for a condition variable         */
+    { 11,"RUNNING"},                /**< currently running                        */
+    { 12,"PENDING"},                /**< waiting to be scheduled to run           */
+    { 13,"NUMOF"}                    /**< number of supported thread states        */
 };
+
 #define RIOT_NUM_STATES (sizeof(riot_thread_states)/sizeof(struct riot_thread_state))
 
 
@@ -289,7 +307,8 @@ static int riot_update_threads(struct rtos *rtos)
 		}
 
 		rtos->thread_details[tasks_found].exists = true;
-		rtos->thread_details[tasks_found].display_str = NULL;
+// 		rtos->thread_details[tasks_found].thread_name_str = NULL;
+//         rtos->thread_details[tasks_found].extra_info_str = NULL;
 
 		tasks_found++;
 	}
@@ -297,12 +316,11 @@ static int riot_update_threads(struct rtos *rtos)
 	return 0;
 }
 
-static int riot_get_thread_reg_list(struct rtos *rtos, int64_t thread_id, char **hex_reg_list)
+static int riot_get_thread_reg_list(struct rtos *rtos, int64_t thread_id,
+		struct rtos_reg **reg_list, int *num_regs)
 {
 	int retval;
 	const struct riot_params *param;
-
-	*hex_reg_list = NULL;
 
 	if (rtos == NULL)
 		return -1;
@@ -341,7 +359,7 @@ static int riot_get_thread_reg_list(struct rtos *rtos, int64_t thread_id, char *
 	return rtos_generic_stack_read(rtos->target,
 								   param->stacking_info,
 								   stackptr,
-								   hex_reg_list);
+								   reg_list, num_regs);
 }
 
 static int riot_get_symbol_list_to_lookup(symbol_table_elem_t *symbol_list[])
@@ -366,14 +384,14 @@ static int riot_get_symbol_list_to_lookup(symbol_table_elem_t *symbol_list[])
 	return 0;
 }
 
-static int riot_detect_rtos(struct target *target)
+static bool riot_detect_rtos(struct target *target)
 {
 	if ((target->rtos->symbols != NULL) &&
 	     (target->rtos->symbols[RIOT_THREADS_BASE].address != 0)) {
 		/* looks like RIOT */
-		return 1;
+		return true;
 	}
-	return 0;
+	return false;
 }
 
 static int riot_create(struct target *target)
