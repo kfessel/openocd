@@ -37,42 +37,86 @@ static int riot_update_threads(struct rtos *rtos);
 static int riot_get_thread_reg_list(struct rtos *rtos, int64_t thread_id,struct rtos_reg **reg_list, int *num_regs);
 static int riot_get_symbol_list_to_lookup(symbol_table_elem_t *symbol_list[]);
 
-
+#if 0
 struct riot_thread_state {
 	int value;
 	const char *desc;
 };
 
-/* refer core/tcb.h */
-// static const struct riot_thread_state riot_thread_states[] = {
-// 	{ 0, "Stopped" },
-// 	{ 1, "Sleeping" },
-// 	{ 2, "Blocked mutex" },
-// 	{ 3, "Blocked receive" },
-// 	{ 4, "Blocked send" },
-// 	{ 5, "Blocked reply" },
-// 	{ 6, "Running" },
-// 	{ 7, "Pending" },
-// };
-
+// ref.: <RIOT>/core/include/sched.h
 static const struct riot_thread_state riot_thread_states[] = {
-    { 0,"STOPPED"},                /**< has terminated                           */
-    { 1,"ZOMBIE"},                 /**< has terminated & keeps thread's thread_t */
-    { 2,"SLEEPING"},               /**< sleeping                                 */
-    { 3,"MUTEX_BLOCKED"},          /**< waiting for a locked mutex               */
-    { 4,"RECEIVE_BLOCKED"},        /**< waiting for a message                    */
-    { 5,"SEND_BLOCKED"},           /**< waiting for message to be delivered      */
-    { 6,"REPLY_BLOCKED"},          /**< waiting for a message response           */
-    { 7,"FLAG_BLOCKED_ANY"},       /**< waiting for any flag from flag_mask      */
-    { 8,"FLAG_BLOCKED_ALL"},       /**< waiting for all flags in flag_mask       */
-    { 9,"MBOX_BLOCKED"},           /**< waiting for get/put on mbox              */
-    { 10,"COND_BLOCKED"},           /**< waiting for a condition variable         */
-    { 11,"RUNNING"},                /**< currently running                        */
-    { 12,"PENDING"},                /**< waiting to be scheduled to run           */
-    { 13,"NUMOF"}                    /**< number of supported thread states        */
+	{  0,"STOPPED"},                /**< has terminated                           */
+	{  1,"ZOMBIE"},                 /**< has terminated & keeps thread's thread_t */
+	{  2,"SLEEPING"},               /**< sleeping                                 */
+	{  3,"MUTEX_BLOCKED"},          /**< waiting for a locked mutex               */
+	{  4,"RECEIVE_BLOCKED"},        /**< waiting for a message                    */
+	{  5,"SEND_BLOCKED"},           /**< waiting for message to be delivered      */
+	{  6,"REPLY_BLOCKED"},          /**< waiting for a message response           */
+	{  7,"FLAG_BLOCKED_ANY"},       /**< waiting for any flag from flag_mask      */
+	{  8,"FLAG_BLOCKED_ALL"},       /**< waiting for all flags in flag_mask       */
+	{  9,"MBOX_BLOCKED"},           /**< waiting for get/put on mbox              */
+	{ 10,"COND_BLOCKED"},           /**< waiting for a condition variable         */
+	{ 11,"RUNNING"},                /**< currently running                        */
+	{ 12,"PENDING"}                 /**< waiting to be scheduled to run           */
+};
+#define RIOT_NUM_STATES (sizeof(riot_thread_states)/sizeof(struct riot_thread_state))
+
+static const char * riot_state2str(uint8_t status){
+        unsigned int k;
+		for (k = 0; k < RIOT_NUM_STATES; k++) {
+			if (riot_thread_states[k].value == status)
+				break;
+		}
+		if (k == RIOT_NUM_STATES) 
+			return "unknown state" ;
+		else
+			riot_thread_states[k].desc;
+}
+#else
+// ref.: <RIOT>/core/include/sched.h
+typedef enum {
+    STATUS_STOPPED=0,                 /**< has terminated                           */
+    STATUS_ZOMBIE,                  /**< has terminated & keeps thread's thread_t */
+    STATUS_SLEEPING,                /**< sleeping                                 */
+    STATUS_MUTEX_BLOCKED,           /**< waiting for a locked mutex               */
+    STATUS_RECEIVE_BLOCKED,         /**< waiting for a message                    */
+    STATUS_SEND_BLOCKED,            /**< waiting for message to be delivered      */
+    STATUS_REPLY_BLOCKED,           /**< waiting for a message response           */
+    STATUS_FLAG_BLOCKED_ANY,        /**< waiting for any flag from flag_mask      */
+    STATUS_FLAG_BLOCKED_ALL,        /**< waiting for all flags in flag_mask       */
+    STATUS_MBOX_BLOCKED,            /**< waiting for get/put on mbox              */
+    STATUS_COND_BLOCKED,            /**< waiting for a condition variable         */
+    STATUS_RUNNING,                 /**< currently running                        */
+    STATUS_PENDING,                 /**< waiting to be scheduled to run           */
+    STATUS_NUMOF                    /**< number of supported thread states        */
+} thread_status_t;
+
+// ref.: <RIOT>/sys/ps/ps.c
+static const char * state_names[] = {
+    [STATUS_RUNNING] = "running",
+    [STATUS_PENDING] = "pending",
+    [STATUS_STOPPED] = "stopped",
+    [STATUS_SLEEPING] = "sleeping",
+    [STATUS_ZOMBIE] = "zombie",
+    [STATUS_MUTEX_BLOCKED] = "bl mutex",
+    [STATUS_RECEIVE_BLOCKED] = "bl rx",
+    [STATUS_SEND_BLOCKED] = "bl send",
+    [STATUS_REPLY_BLOCKED] = "bl reply",
+    [STATUS_FLAG_BLOCKED_ANY] = "bl anyfl",
+    [STATUS_FLAG_BLOCKED_ALL] = "bl allfl",
+    [STATUS_MBOX_BLOCKED] = "bl mbox",
+    [STATUS_COND_BLOCKED] = "bl cond",
 };
 
-#define RIOT_NUM_STATES (sizeof(riot_thread_states)/sizeof(struct riot_thread_state))
+static const char * riot_state2str(uint8_t status){
+	static const char * unknown="unknown";
+	if( status < STATUS_NUMOF )
+		return state_names[status];
+	else 
+		return unknown;
+}
+
+#endif
 
 
 enum riot_architecture {
@@ -258,14 +302,8 @@ static int riot_update_threads(struct rtos *rtos)
 		}
 
 		/* Search for state */
-		unsigned int k;
-		for (k = 0; k < RIOT_NUM_STATES; k++) {
-			if (riot_thread_states[k].value == status)
-				break;
-		}
-		const char *state_str = (k == RIOT_NUM_STATES) ?
-									"unknown state" :
-									riot_thread_states[k].desc;
+		const char *state_str = riot_state2str(status);
+
 		/* Copy state string */
 		rtos->thread_details[tasks_found].extra_info_str = malloc(strlen(state_str) + 1);
 		strcpy(rtos->thread_details[tasks_found].extra_info_str, state_str);
