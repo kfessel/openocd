@@ -127,18 +127,21 @@ enum riot_architecture {
 struct riot_params {
 	unsigned char thread_sp_offset;
 	unsigned char thread_status_offset;
+	unsigned char thread_priority_offset;
 	const struct rtos_register_stacking *stacking_info;
 };
 
 static const struct riot_params riot_params_list[] = {
 	{	/* ARMv6M */
-		0x00,							/* thread_sp_offset */
-		0x04,							/* thread_status_offset */
+		0x00,							/* thread_sp_offset 4 Byte*/
+		0x04,							/* thread_status_offset 1 Byte*/
+		0x05,							/* thread_priority_offset 1 Byte*/
 		&rtos_riot_Cortex_M0_stacking,	/* stacking_info */
 	},
 	{	/* ARMv7M */
 		0x00,							/* thread_sp_offset */
 		0x04,							/* thread_status_offset */
+		0x05,							/* thread_priority_offset */
 		&rtos_riot_Cortex_M34_stacking,	/* stacking_info */
 	},
 };
@@ -301,12 +304,24 @@ static int riot_update_threads(struct rtos *rtos)
 			return retval;
 		}
 
+		uint8_t priority=0;
+		retval = target_read_buffer(rtos->target,
+									tcb_pointer + param->thread_priority_offset,
+									sizeof(priority),
+									(uint8_t *)&priority);
+		if (retval != ERROR_OK) {
+			LOG_ERROR("Can't parse `%s`", riot_symbol_list[RIOT_THREADS_BASE]);
+			return retval;
+		}
+
 		/* Search for state */
 		const char *state_str = riot_state2str(status);
 
 		/* Copy state string */
-		rtos->thread_details[tasks_found].extra_info_str = malloc(strlen(state_str) + 1);
-		strcpy(rtos->thread_details[tasks_found].extra_info_str, state_str);
+		size_t extra_info_len = strlen(state_str) + 8;
+		rtos->thread_details[tasks_found].extra_info_str = malloc(extra_info_len);
+		snprintf(rtos->thread_details[tasks_found].extra_info_str, extra_info_len,
+				 "P: %d %s", priority, riot_state2str(status));
 
 		/* Thread names are only available if compiled with DEVELHELP */
 		if (name_offset != 0) {
@@ -331,8 +346,7 @@ static int riot_update_threads(struct rtos *rtos)
 			}
 
 			/* Make sure the string inside the buffer terminates */
-			if (buffer[sizeof(buffer) - 1] != 0)
-				buffer[sizeof(buffer) - 1] = 0;
+			buffer[sizeof(buffer) - 1] = 0;
 
 			/* Copy thread name */
 			rtos->thread_details[tasks_found].thread_name_str = malloc(strlen(buffer) + 1);
@@ -345,9 +359,6 @@ static int riot_update_threads(struct rtos *rtos)
 		}
 
 		rtos->thread_details[tasks_found].exists = true;
-// 		rtos->thread_details[tasks_found].thread_name_str = NULL;
-//         rtos->thread_details[tasks_found].extra_info_str = NULL;
-
 		tasks_found++;
 	}
 
