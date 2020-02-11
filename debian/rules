@@ -16,7 +16,6 @@ endif
 DEB_CONFIGURE_EXTRA_FLAGS += \
 	--disable-werror \
 	--disable-internal-jimtcl \
-	--disable-internal-libjaylink \
 	\
 	--enable-dummy \
 	--enable-ep93xx \

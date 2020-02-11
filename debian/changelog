@@ -1,3 +1,11 @@
+openocd (0.10.0-6-git) unstable; urgency=medium
+
+  * update from git
+  + use internal libjaylink
+  * add riot support
+
+ -- Karl Fessel <kfessel@earth.li>  Fri, 04 Feb 2020 14:58:35 -0300
+
 openocd (0.10.0-6) unstable; urgency=medium
 
   * Fix USB ID capitalisation in AppStream information
